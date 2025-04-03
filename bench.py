@@ -20,8 +20,12 @@ ITERATIONS = 10
 # Concurrent readers and writers per second
 NUM_READERS = 5
 NUM_WRITERS = 3
+NUM_WRITER_SCHEMA_CHANGE = 1
 # Max concurrent threads
-MAX_THREADS = NUM_READERS + NUM_WRITERS+1
+MAX_THREADS = NUM_READERS + NUM_WRITERS + NUM_WRITER_SCHEMA_CHANGE
+
+# Set to True will retry the failed operations after a delay
+RETTRY_FAILED = True
 
 
 def random_string(length=10):
@@ -58,6 +62,8 @@ builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
 
 spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
+# Enable auto schema merging, this will allow us to merge the schema automatically in all delta lake tables
+spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
 # delete the current delta table
 os.system(f"rm -rf {TABLE_PATH}")
 
@@ -72,13 +78,19 @@ def worker(tasks: queue.Queue[Callable[[], None]],
            results: queue.Queue[Tuple[str, bool]]):
     while True:
         # Get the next task from the queue
-        operation = tasks.get(block=True, timeout=2)
+        operation, attempt = tasks.get(block=True, timeout=2)
+        # sleep for attemps *0.5 seconds
+        time.sleep(attempt * 0.5)
         try:
             operation()
             results.put((operation.__name__, True), block=False)
         except Exception as e:
-            print(e)
+            print(f"Error: {e}")
             results.put((operation.__name__, False), block=False)
+            if RETTRY_FAILED:
+                # Retry the operation
+                tasks.put((operation, attempt+1), block=False)
+
         finally:
             # Mark the task as done
             tasks.task_done()
@@ -115,8 +127,8 @@ def main():
     results = queue.Queue()
 
     operations = [(read_delta_table, NUM_READERS),
-                  (change_schema_and_append_delta_row, 1),
                   (append_delta_row, NUM_WRITERS),
+                  (change_schema_and_append_delta_row, NUM_WRITER_SCHEMA_CHANGE),
                   ]
     operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
     # Create a thread pool executor
@@ -133,7 +145,10 @@ def main():
     for _ in range(ITERATIONS):
         for operation, count in operations:
             for _ in range(count):
-                tasks.put(operation, block=False)
+                # Add the operation to the queue
+                # format (operation, attempt)
+                # The attempt is always 0 for the first time
+                tasks.put((operation, 0), block=False)
         time.sleep(1)
 
     # Wait for all tasks to be done
