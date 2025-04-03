@@ -104,7 +104,7 @@ df = spark.read.format("delta").load(TABLE_PATH)
 
 operations = [(read_delta_table, NUM_READERS),
               (append_delta_table, NUM_WRITERS)]
-golbal_start = time.time()
+
 with tqdm(total=SECONDS, desc="Progress", dynamic_ncols=True) as pbar:
     for _ in range(SECONDS):
         # capture the stdout
@@ -117,7 +117,6 @@ with tqdm(total=SECONDS, desc="Progress", dynamic_ncols=True) as pbar:
         pbar.update(1)
 
 
-golbal_delta_time = time.time() - golbal_start
 # Count the number of successful and failed operations
 operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
 num_theads = sum(map(lambda op: op[1], operations))
@@ -132,7 +131,6 @@ while not queue.empty():
         operation_count[operation]["failure"] += 1
 print("=== Threads finished ===")
 print(f"Number of threads: {num_theads}")
-print(f"Total time: {golbal_delta_time:.2f} seconds")
 print(f"Number of readers: {NUM_READERS}")
 print(f"Number of writers: {NUM_WRITERS}")
 
