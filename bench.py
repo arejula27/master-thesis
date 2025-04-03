@@ -1,4 +1,6 @@
 import os
+import time
+from tqdm import tqdm
 import io
 import sys
 import random
@@ -14,6 +16,8 @@ import queue
 
 TABLE_PATH = "delta-table-bench"
 
+# Number of seconds to run the test
+SECONDS = 5
 # Concurrent readers and writers per second
 NUM_READERS = 10
 NUM_WRITERS = 3
@@ -60,6 +64,26 @@ def append_delta_table():
     df.write.format("delta").mode("append").save(TABLE_PATH)
 
 
+def run_operations(operations, max_time=1):
+    threads = []
+
+    for func, num_threads in operations:
+        start_time = time.time()
+        for _ in range(num_threads):
+            thread = threading.Thread(target=func)
+            threads.append(thread)
+            # Start the thread
+            thread.start()
+
+        for thread in threads:
+            thread.join(timeout=1)
+
+        elapsed_time = time.time() - start_time
+
+        time_to_sleep = max(0, max_time - elapsed_time)
+        time.sleep(time_to_sleep)  # Sleep for the remaining time
+
+
 builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
     .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
     .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
@@ -78,31 +102,25 @@ df.write.format("delta").save(TABLE_PATH)
 # read the delta table
 df = spark.read.format("delta").load(TABLE_PATH)
 
-# create a pool of threads
-threads = []
-
 operations = [(read_delta_table, NUM_READERS),
               (append_delta_table, NUM_WRITERS)]
-for func, num_threads in operations:
-    for _ in range(num_threads):
-        thread = threading.Thread(target=func)
-        threads.append(thread)
+golbal_start = time.time()
+with tqdm(total=SECONDS, desc="Progress", dynamic_ncols=True) as pbar:
+    for _ in range(SECONDS):
+        # capture the stdout
+        original_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        # Start all threads
+        run_operations(operations)
+        # Restore the stdout
+        sys.stdout = original_stdout
+        pbar.update(1)
 
-# Redirect stdout to capture print statements
 
-original_stdout = sys.stdout
-sys.stdout = io.StringIO()
-# Start all threads
-for thread in threads:
-    thread.start()
-# Wait for all threads to finish
-for thread in threads:
-    thread.join()
-    sys.stdout = original_stdout
-
+golbal_delta_time = time.time() - golbal_start
 # Count the number of successful and failed operations
 operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
-
+num_theads = sum(map(lambda op: op[1], operations))
 while not queue.empty():
     operation, success = queue.get()
     print(f"Operation: {operation}, Success: {success}")
@@ -113,7 +131,8 @@ while not queue.empty():
     else:
         operation_count[operation]["failure"] += 1
 print("=== Threads finished ===")
-print(f"Number of threads: {len(threads)}")
+print(f"Number of threads: {num_theads}")
+print(f"Total time: {golbal_delta_time:.2f} seconds")
 print(f"Number of readers: {NUM_READERS}")
 print(f"Number of writers: {NUM_WRITERS}")
 
