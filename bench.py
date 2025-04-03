@@ -12,20 +12,22 @@ from delta.tables import *
 import threading
 from functools import wraps
 import queue
-
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable, Tuple
 
 TABLE_PATH = "delta-table-bench"
 
 # Number of seconds to run the test
 SECONDS = 5
 # Concurrent readers and writers per second
-NUM_READERS = 10
-NUM_WRITERS = 3
+NUM_READERS = 2
+NUM_WRITERS = 1
+# Max concurrent threads
+MAX_THREADS = NUM_READERS + NUM_WRITERS
 
 
 # Create a queue to hold the read and write operations results
 # It is concurrently safe for multiple threads
-queue = queue.Queue()
 
 
 def monitor(func):
@@ -64,6 +66,7 @@ def append_delta_table():
     df.write.format("delta").mode("append").save(TABLE_PATH)
 
 
+""""
 def run_operations(operations, max_time=1):
     threads = []
 
@@ -105,42 +108,101 @@ df = spark.read.format("delta").load(TABLE_PATH)
 operations = [(read_delta_table, NUM_READERS),
               (append_delta_table, NUM_WRITERS)]
 
-with tqdm(total=SECONDS, desc="Progress", dynamic_ncols=True) as pbar:
+original_stdout = sys.stdout
+sys.stdout = io.StringIO()
+for _ in range(SECONDS):
+    # capture the stdout
+    # Start all threads
+    run_operations(operations)
+    # Restore the stdout
+sys.stdout = original_stdout
+"""
+
+
+#######
+
+def worker(tasks: queue.Queue[Callable[[], None]],
+           results: queue.Queue[Tuple[str, bool]]):
+    while True:
+        # Get the next task from the queue
+        operation = tasks.get(block=True, timeout=2)
+        try:
+            operation()
+            results.put((operation.__name__, True), block=False)
+        except Exception:
+            results.put((operation.__name__, False), block=False)
+        finally:
+            # Mark the task as done
+            tasks.task_done()
+
+
+def dummy_func():
+    # Simulate some work
+    time.sleep(1)
+    # print the thread Name
+    print(f"Thread {threading.current_thread().name} is working")
+
+
+def print_stats(operation_count):
+    print("=== Threads finished ===")
+    print(f"Total number of threads: {MAX_THREADS}")
+
+    total_success = sum(counts['success']
+                        for counts in operation_count.values())
+    total_failure = sum(counts['failure']
+                        for counts in operation_count.values())
+    print(f"Total number of operations: {total_success + total_failure}")
+    print(f"Total number of successful operations: {total_success}")
+    print(f"Total number of failed operations: {total_failure}")
+    print("=== Operation Results ===")
+    for operation, counts in operation_count.items():
+        print(f"Operation: {operation}")
+        print(f"\tSuccessful operations: {counts['success']}")
+        print(f"\tFailed operations: {counts['failure']}")
+
+
+def main():
+
+    tasks = queue.Queue()
+    results = queue.Queue()
+
+    operations = [(read_delta_table, NUM_READERS),
+                  (append_delta_table, NUM_WRITERS)]
+    operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
+    # Create a thread pool executor
+    executor = ThreadPoolExecutor(max_workers=MAX_THREADS)
+    # Start all threads
+    for _ in range(MAX_THREADS):
+        executor.submit(worker, tasks, results)
+
     for _ in range(SECONDS):
-        # capture the stdout
-        original_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-        # Start all threads
-        run_operations(operations)
-        # Restore the stdout
-        sys.stdout = original_stdout
-        pbar.update(1)
+        tasks.put(dummy_func, block=False)
+        tasks.put(dummy_func, block=False)
+        tasks.put(dummy_func, block=False)
+        tasks.put(dummy_func, block=False)
+        time.sleep(1)
+
+    # Wait for all tasks to be done
+    tasks.join()
+    print("=== All tasks done ===")
+
+    # Count the number of successful and failed operations
+    operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
+    while not results.empty():
+        operation, success = results.get()
+        results.task_done()
+        # Actualizar los contadores en el diccionario
+        if success:
+            operation_count[operation]["success"] += 1
+        else:
+            operation_count[operation]["failure"] += 1
+
+    # Print the results
+    print_stats(operation_count)
+
+    # Shutdown the executor
+    executor.shutdown(wait=True)
 
 
-# Count the number of successful and failed operations
-operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
-num_theads = sum(map(lambda op: op[1], operations))
-while not queue.empty():
-    operation, success = queue.get()
-    print(f"Operation: {operation}, Success: {success}")
-
-    # Actualizar los contadores en el diccionario
-    if success:
-        operation_count[operation]["success"] += 1
-    else:
-        operation_count[operation]["failure"] += 1
-print("=== Threads finished ===")
-print(f"Number of threads: {num_theads}")
-print(f"Number of readers: {NUM_READERS}")
-print(f"Number of writers: {NUM_WRITERS}")
-
-total_success = sum(counts['success'] for counts in operation_count.values())
-total_failure = sum(counts['failure']
-                    for counts in operation_count.values())
-print(f"Total number of successful operations: {total_success}")
-print(f"Total number of failed operations: {total_failure}")
-print("=== Operation Results ===")
-for operation, counts in operation_count.items():
-    print(f"Operation: {operation}")
-    print(f"\tSuccessful operations: {counts['success']}")
-    print(f"\tFailed operations: {counts['failure']}")
+if __name__ == "__main__":
+    main()
