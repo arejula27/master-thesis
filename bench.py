@@ -5,6 +5,7 @@ import random
 import string
 import pyspark
 from delta import *
+from collections import defaultdict
 from delta.tables import *
 import threading
 from functools import wraps
@@ -79,13 +80,13 @@ df = spark.read.format("delta").load(TABLE_PATH)
 
 # create a pool of threads
 threads = []
-for i in range(NUM_READERS):
-    thread = threading.Thread(target=read_delta_table)
-    threads.append(thread)
-for i in range(NUM_WRITERS):
-    thread = threading.Thread(target=append_delta_table)
-    threads.append(thread)
 
+operations = [(read_delta_table, NUM_READERS),
+              (append_delta_table, NUM_WRITERS)]
+for func, num_threads in operations:
+    for _ in range(num_threads):
+        thread = threading.Thread(target=func)
+        threads.append(thread)
 
 # Redirect stdout to capture print statements
 
@@ -97,39 +98,32 @@ for thread in threads:
 # Wait for all threads to finish
 for thread in threads:
     thread.join()
-sys.stdout = original_stdout
+    sys.stdout = original_stdout
 
 # Count the number of successful and failed operations
-success_read_count = 0
-failure_read_count = 0
-success_write_count = 0
-failure_write_count = 0
+operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
 
 while not queue.empty():
-    # switch to determine the operation type
     operation, success = queue.get()
     print(f"Operation: {operation}, Success: {success}")
-    match operation:
-        case "read_delta_table":
-            if success:
-                success_read_count += 1
-            else:
-                failure_read_count += 1
-        case "append_delta_table":
-            if success:
-                success_write_count += 1
-            else:
-                failure_write_count += 1
 
+    # Actualizar los contadores en el diccionario
+    if success:
+        operation_count[operation]["success"] += 1
+    else:
+        operation_count[operation]["failure"] += 1
 print("=== Threads finished ===")
 print(f"Number of threads: {len(threads)}")
 print(f"Number of readers: {NUM_READERS}")
 print(f"Number of writers: {NUM_WRITERS}")
-print(f"Total number of successful operations: {
-      success_read_count + success_write_count}")
-print(f"Total number of failed operations: {
-      failure_read_count + failure_write_count}")
-print(f"\tSuccessful read operations: {success_read_count}")
-print(f"\tFailed read operations: {failure_read_count}")
-print(f"\tSuccessful write operations: {success_write_count}")
-print(f"\tFailed write operations: {failure_write_count}")
+
+total_success = sum(counts['success'] for counts in operation_count.values())
+total_failure = sum(counts['failure']
+                    for counts in operation_count.values())
+print(f"Total number of successful operations: {total_success}")
+print(f"Total number of failed operations: {total_failure}")
+print("=== Operation Results ===")
+for operation, counts in operation_count.items():
+    print(f"Operation: {operation}")
+    print(f"\tSuccessful operations: {counts['success']}")
+    print(f"\tFailed operations: {counts['failure']}")
