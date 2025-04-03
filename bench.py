@@ -1,6 +1,5 @@
 import os
 import time
-from tqdm import tqdm
 import io
 import sys
 import random
@@ -10,7 +9,6 @@ from delta import *
 from collections import defaultdict
 from delta.tables import *
 import threading
-from functools import wraps
 import queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Tuple
@@ -18,30 +16,12 @@ from typing import Callable, Tuple
 TABLE_PATH = "delta-table-bench"
 
 # Number of seconds to run the test
-SECONDS = 5
+SECONDS = 10
 # Concurrent readers and writers per second
-NUM_READERS = 2
-NUM_WRITERS = 1
+NUM_READERS = 5
+NUM_WRITERS = 3
 # Max concurrent threads
 MAX_THREADS = NUM_READERS + NUM_WRITERS
-
-
-# Create a queue to hold the read and write operations results
-# It is concurrently safe for multiple threads
-
-
-def monitor(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            func(*args, **kwargs)  # Call the function
-            # if the function is successful update the queue
-            queue.put((func.__name__, True))
-        except Exception:
-            # if the function fails update the queue
-            queue.put((func.__name__, False))
-
-    return wrapper
 
 
 def random_string(length=10):
@@ -50,41 +30,18 @@ def random_string(length=10):
     return ''.join(random.choice(letters) for i in range(length))
 
 
-@monitor
 def read_delta_table():
     # Read the delta table
     df = spark.read.format("delta").load(TABLE_PATH)
     df.show()
 
 
-@monitor
 def append_delta_table():
     # Append a new row to the delta table
     data = [(random_string(),)]
     columns = ["col1"]
     df = spark.createDataFrame(data, columns)
     df.write.format("delta").mode("append").save(TABLE_PATH)
-
-
-""""
-def run_operations(operations, max_time=1):
-    threads = []
-
-    for func, num_threads in operations:
-        start_time = time.time()
-        for _ in range(num_threads):
-            thread = threading.Thread(target=func)
-            threads.append(thread)
-            # Start the thread
-            thread.start()
-
-        for thread in threads:
-            thread.join(timeout=1)
-
-        elapsed_time = time.time() - start_time
-
-        time_to_sleep = max(0, max_time - elapsed_time)
-        time.sleep(time_to_sleep)  # Sleep for the remaining time
 
 
 builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
@@ -102,24 +59,6 @@ columns = ["col1"]
 df = spark.createDataFrame(data, columns)
 df.write.format("delta").save(TABLE_PATH)
 
-# read the delta table
-df = spark.read.format("delta").load(TABLE_PATH)
-
-operations = [(read_delta_table, NUM_READERS),
-              (append_delta_table, NUM_WRITERS)]
-
-original_stdout = sys.stdout
-sys.stdout = io.StringIO()
-for _ in range(SECONDS):
-    # capture the stdout
-    # Start all threads
-    run_operations(operations)
-    # Restore the stdout
-sys.stdout = original_stdout
-"""
-
-
-#######
 
 def worker(tasks: queue.Queue[Callable[[], None]],
            results: queue.Queue[Tuple[str, bool]]):
@@ -129,18 +68,12 @@ def worker(tasks: queue.Queue[Callable[[], None]],
         try:
             operation()
             results.put((operation.__name__, True), block=False)
-        except Exception:
+        except Exception as e:
+            print(e)
             results.put((operation.__name__, False), block=False)
         finally:
             # Mark the task as done
             tasks.task_done()
-
-
-def dummy_func():
-    # Simulate some work
-    time.sleep(1)
-    # print the thread Name
-    print(f"Thread {threading.current_thread().name} is working")
 
 
 def print_stats(operation_count):
@@ -175,15 +108,25 @@ def main():
     for _ in range(MAX_THREADS):
         executor.submit(worker, tasks, results)
 
+    operations = [(read_delta_table, NUM_READERS),
+                  (append_delta_table, NUM_WRITERS)]
+    # capture the stdout and stderr
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
     for _ in range(SECONDS):
-        tasks.put(dummy_func, block=False)
-        tasks.put(dummy_func, block=False)
-        tasks.put(dummy_func, block=False)
-        tasks.put(dummy_func, block=False)
+        for operation, count in operations:
+            for _ in range(count):
+                tasks.put(operation, block=False)
         time.sleep(1)
 
     # Wait for all tasks to be done
     tasks.join()
+    # Restore stdout and stderr
+    sys.stdout = old_stdout
+    sys.stderr = old_stderr
+
     print("=== All tasks done ===")
 
     # Count the number of successful and failed operations
