@@ -25,7 +25,7 @@ NUM_WRITER_SCHEMA_CHANGE = 1
 MAX_THREADS = NUM_READERS + NUM_WRITERS + NUM_WRITER_SCHEMA_CHANGE
 
 # Set to True will retry the failed operations after a delay
-RETTRY_FAILED = True
+RETTRY_FAILED = False
 
 
 def random_string(length=10):
@@ -81,12 +81,17 @@ def worker(tasks: queue.Queue[Callable[[], None]],
         operation, attempt = tasks.get(block=True, timeout=2)
         # sleep for attemps *0.5 seconds
         time.sleep(attempt * 0.5)
+        start_time = time.time()
         try:
             operation()
-            results.put((operation.__name__, True), block=False)
+            end_time = time.time()
+            results.put((operation.__name__, True,
+                        end_time-start_time), block=False)
         except Exception as e:
             print(f"Error: {e}")
-            results.put((operation.__name__, False), block=False)
+            end_time = time.time()
+            results.put((operation.__name__, False,
+                        end_time-start_time), block=False)
             if RETTRY_FAILED:
                 # Retry the operation
                 tasks.put((operation, attempt+1), block=False)
@@ -96,7 +101,7 @@ def worker(tasks: queue.Queue[Callable[[], None]],
             tasks.task_done()
 
 
-def print_stats(operation_task_per_iter, operation_count):
+def print_stats(operation_task_per_iter, operation_count, global_time_taken, all_operations_time):
     print("=== Statistics ===")
     print(f"Total number of threads: {MAX_THREADS}")
 
@@ -111,6 +116,11 @@ def print_stats(operation_task_per_iter, operation_count):
               operation.__name__} per second called: {number}")
 
     print("=== Operation Results ===")
+    print(f"Total time taken: {global_time_taken:.2f} seconds")
+    # calc average time taken
+    average_time_taken = sum(all_operations_time) / len(all_operations_time)
+    print(f"Average time taken per operation: {
+          average_time_taken:.2f} seconds")
     print(f"Total number of successful operations: {total_success}")
 
     print(f"Total number of failed operations: {total_failure}")
@@ -119,6 +129,9 @@ def print_stats(operation_task_per_iter, operation_count):
         print(f"Operation: {operation}")
         print(f"\tSuccessful operations: {counts['success']}")
         print(f"\tFailed operations: {counts['failure']}")
+
+    print("All operations time taken:")
+    print(f"{all_operations_time}")
 
 
 def main():
@@ -142,6 +155,7 @@ def main():
     old_stderr = sys.stderr
     sys.stdout = io.StringIO()
     sys.stderr = io.StringIO()
+    start_time = time.time()
     for _ in range(ITERATIONS):
         for operation, count in operations:
             for _ in range(count):
@@ -153,15 +167,18 @@ def main():
 
     # Wait for all tasks to be done
     tasks.join()
+    end_time = time.time()
     # Restore stdout and stderr
     sys.stdout = old_stdout
     sys.stderr = old_stderr
 
     # Count the number of successful and failed operations
     operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
+    times_taken = []
     while not results.empty():
-        operation, success = results.get()
+        operation, success, time_taken = results.get()
         results.task_done()
+        times_taken.append(time_taken)
         # Actualizar los contadores en el diccionario
         if success:
             operation_count[operation]["success"] += 1
@@ -169,7 +186,7 @@ def main():
             operation_count[operation]["failure"] += 1
 
     # Print the results
-    print_stats(operations, operation_count)
+    print_stats(operations, operation_count, end_time-start_time, times_taken)
 
     # Shutdown the executor
     executor.shutdown(wait=True)
