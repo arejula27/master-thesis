@@ -10,12 +10,12 @@ schema-conflicts.py
 ## How to run custom delta lake
 1. Clone the delta lake repository
 ```bash
-git clone git@github.com:delta-io/delta.git
+git clone git@github.com:delta-io/delta.git 
 ```
-It is required to have installed `sbt` and `java 8` in your system, if you do not want to install tgem locallly u can use the nix dev environment (run `nix-shell`).
+It is required to have installed `sbt` and `java 8` in your system, if you do not want to install them locally you can use the nix dev environment .
 ```bash
-cp shell.nix ~/workspaces/delta/shell.nix
-cd ~/workspaces/delta
+cp shell.nix ~/delta/shell.nix
+cd ~/delta
 nix-shell
 ```
 
@@ -30,3 +30,9 @@ To generate artifacts, run
 build/sbt package
 ```
  After this command you will read where the `.jar`files are generated.
+
+ On the line `9` of the `test-custom-delta.py` file you have to change the path to the jar file generated in the previous step.
+ After this you can run the script with:
+```bash
+python3 test-custom-delta.py
+```
