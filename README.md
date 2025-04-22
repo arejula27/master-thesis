@@ -1,3 +1,4 @@
+# Master thesis srcrips
 ## Files
 - append_only_conflicts.py: Tries to append two rows at the concurrently with only one different column (bob,47) and (bob,23), Delta lake appends both of them as they are independent, the column values are not checked. This experiments verifies that appends with no schema changes can be done concurrently.
 - change_schema.py: Tries to change the schema of a table concurrently, two transactions at the same time try to rename the column 'name' to 'first_name' and 'last_name'. Delta lake does not allow this operation, the first transaction that tries to change the schema is successful, the second one fails.
@@ -6,3 +7,26 @@
 schema-conflicts.py
 - test-custom-delta.py: this experiment is trying to use my custom version of delta lake spark.
 
+## How to run custom delta lake
+1. Clone the delta lake repository
+```bash
+git clone git@github.com:delta-io/delta.git
+```
+It is required to have installed `sbt` and `java 8` in your system, if you do not want to install tgem locallly u can use the nix dev environment (run `nix-shell`).
+```bash
+cp shell.nix ~/workspaces/delta/shell.nix
+cd ~/workspaces/delta
+nix-shell
+```
+
+After installing it compile the project:
+```bash
+cd delta
+build/sbt compile
+```
+
+To generate artifacts, run
+```bash
+build/sbt package
+```
+ After this command you will read where the `.jar`files are generated.
