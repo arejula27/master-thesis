@@ -23,6 +23,20 @@ def change_schema(old_column, new_column):
         print("==============")
 
 
+def get_folder_stats():
+    """Get the number of parquet files in a folder of the table"""
+    parquet_files = [file for file in os.listdir(
+        TABLE_PATH) if file.endswith('.parquet')]
+    return len(parquet_files)
+
+
+def print_table(message="New record"):
+    print(f"=== {message} ===")
+    df = spark.read.format("delta").load(TABLE_PATH)
+    df.show()
+    print(f"Number of parquet files: {get_folder_stats()}")
+
+
 builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
     .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
     .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
@@ -45,9 +59,7 @@ df = spark.createDataFrame(data, schema)
 df.write.format("delta").save(TABLE_PATH)
 
 # read the delta table
-df = spark.read.format("delta").load(TABLE_PATH)
-df.show()
-
+print_table("Initial Table")
 
 # Add a new column
 new_schema = StructType([
@@ -57,15 +69,14 @@ new_schema = StructType([
 data1 = [("frank", "usa")]
 df = spark.createDataFrame(data1, new_schema)
 df.write.format("delta").mode("append").save(TABLE_PATH)
-print("=== New Schema ===")
-df = spark.read.format("delta").load(TABLE_PATH)
-df.show()
-
+print_table("New Column")
 
 data = [("jose",)]
 df = spark.createDataFrame(data, schema)
 df.write.format("delta").mode("append").save(TABLE_PATH)
+print_table("New Record")
 
-print("=== New Record ===")
-df = spark.read.format("delta").load(TABLE_PATH)
-df.show()
+data = [("Jorge",), ("Maria",)]
+df = spark.createDataFrame(data, schema)
+df.write.format("delta").mode("append").save(TABLE_PATH)
+print_table("New Record")

@@ -16,6 +16,8 @@ def change_schema(old_column, new_column):
             "overwriteSchema", "true").save(TABLE_PATH)
     except Exception as e:
         print("=== Error ===")
+        print(f"Can not change the schema of the column {
+              old_column} to {new_column}")
         print(e)
         print("==============")
 
