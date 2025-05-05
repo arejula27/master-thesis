@@ -36,3 +36,18 @@ build/sbt package
 ```bash
 python3 test-custom-delta.py
 ```
+
+# How to run the custom delta lake with spark
+1. Create a virtual environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+2. Install the required packages
+```bash
+pip install -r requirements.txt
+```
+3. Run the script
+```bash
+spark-submit --class DeltaExperiment --jars delta-jars/delta-spark_2.12-3.1.0.jar,delta-jars/delta-storage-3.1.0.jar  --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" test-custom-delta.py
+```

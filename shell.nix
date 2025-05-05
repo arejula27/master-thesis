@@ -52,8 +52,9 @@ pkgs.mkShell {
     sbt
     # Spark binary fetched from the official Apache archive
     spark
-    # shell
-    pkgs.zsh
+    # Python 3.13
+    pkgs.python313
+
   ]; 
 
   # Configure the environment variables
@@ -62,7 +63,6 @@ pkgs.mkShell {
 
   # Script to be executed when the shell is started
   shellHook = ''
-    zsh
     export LANG=C.UTF-8
     export LC_ALL=C.UTF-8
 
