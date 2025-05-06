@@ -6,13 +6,18 @@ if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <path_to_python_script>"
     exit 1
 fi
+
+# Get the file name from the argument
+
+python_script="$1"
+
 # Check if the argument is a file
-if [ ! -f "$1" ]; then
+if [ ! -f "$python_script" ]; then
     echo "Error: $1 is not a file"
     exit 1
 fi
 # Check if the file is a python script
-if [[ "$1" != *.py ]]; then
+if [[ "$python_script" != *.py ]]; then
     echo "Error: $1 is not a python script"
     exit 1
 fi
@@ -43,4 +48,4 @@ spark-submit \
   --jars ${delta_jars%?} \
   --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" \
   --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" \
-  test-custom-delta.py 2> /dev/null
+  "$python_script" 2> /dev/null

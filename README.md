@@ -7,7 +7,7 @@
 schema-conflicts.py
 - test-custom-delta.py: this experiment is trying to use my custom version of delta lake spark.
 
-## How to run custom delta lake
+## How to build custom delta lake
 1. Clone the delta lake repository
 ```bash
 git clone git@github.com:delta-io/delta.git 
@@ -18,10 +18,9 @@ cp shell.nix ~/delta/shell.nix
 cd ~/delta
 nix-shell
 ```
-
-After installing it compile the project:
+2. Build the project on the version `3.1.0`
 ```bash
-cd delta
+git checkout v3.1.0
 build/sbt compile
 ```
 
@@ -29,13 +28,9 @@ To generate artifacts, run
 ```bash
 build/sbt package
 ```
- After this command you will read where the `.jar`files are generated.
-
- On the line `9` of the `test-custom-delta.py` file you have to change the path to the jar file generated in the previous step.
- After this you can run the script with:
-```bash
-python3 test-custom-delta.py
-```
+ After this command you will read where the `.jar`files are generated. You need to:
+- `delta/spark/target/scala-2.12/delta-spark_2.12-3.1.0.jar`
+- `delta/storage/target/delta-storage-3.1.0.jar`
 
 # How to run the custom delta lake with spark
 1. Create a virtual environment
@@ -47,7 +42,15 @@ source venv/bin/activate
 ```bash
 pip install -r requirements.txt
 ```
-3. Run the script
+The delta lake `jar` files should be in the `delta-jars` folder. If you do not have this folder, you can create it and copy the files from the previous step.
+
+3. Run the script, the two versions supports by the default is the official `v3.1.0` and the custom one based on `v3.1.0`. In case you want to run your compiled version you need to modify the `run_custom.sh`, changing the file name of the `jar` files.
+
+To check that everything works you can run the official version with any python script:
 ```bash
-spark-submit --class DeltaExperiment --jars delta-jars/delta-spark_2.12-3.1.0.jar,delta-jars/delta-storage-3.1.0.jar  --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" test-custom-delta.py
+./run_official.sh exploration-experiments/create-table.
+```
+You can also run the custom version with the same script:
+```bash
+./run_custom.sh exploration-experiments/create-table.py
 ```
