@@ -53,7 +53,7 @@ pkgs.mkShell {
     # Spark binary fetched from the official Apache archive
     spark
     # Python 3.13
-    pkgs.python313
+    #pkgs.python313
 
   ]; 
 
@@ -67,6 +67,14 @@ pkgs.mkShell {
   shellHook = ''
     export LANG=en_US.utf8
     export LC_ALL=en_US.utf8
+
+     #git aliases
+    alias gs='git status'
+    alias ga='git add'
+    alias gc='git commit'
+    alias gp='git push'
+    alias gpl='git pull'
+
     echo "Your development environment is ready!"
   '';
 }
