@@ -60,13 +60,14 @@ pkgs.mkShell {
   # Configure the environment variables
   SPARK_HOME = "${spark.out}";
   
+  
+  LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
 
   # Script to be executed when the shell is started
   shellHook = ''
-    export LANG=C.UTF-8
-    export LC_ALL=C.UTF-8
-
-    echo "Your development environment for qbeast is ready, happy coding!"
+    export LANG=en_US.utf8
+    export LC_ALL=en_US.utf8
+    echo "Your development environment is ready!"
   '';
 }
 
