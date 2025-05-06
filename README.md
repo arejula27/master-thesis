@@ -48,7 +48,7 @@ The delta lake `jar` files should be in the `delta-jars` folder. If you do not h
 
 To check that everything works you can run the official version with any python script:
 ```bash
-./run_official.sh exploration-experiments/create-table.
+./run_official.sh exploration-experiments/create-table.py
 ```
 You can also run the custom version with the same script:
 ```bash

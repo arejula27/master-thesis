@@ -53,7 +53,7 @@ pkgs.mkShell {
     # Spark binary fetched from the official Apache archive
     spark
     # Python 3.13
-    #pkgs.python313
+    pkgs.python313
 
   ]; 
 
