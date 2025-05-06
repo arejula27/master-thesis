@@ -33,6 +33,8 @@ build/sbt package
 - `delta/storage/target/delta-storage-3.1.0.jar`
 
 # How to run the custom delta lake with spark
+I provided a `nix-shell` environment to run the experiments. You can use it to run the experiment, ensuring that you will have the same environment as me. You can also run the experiments with your own environment, but you need to have installed `python3.13`, `Java8`, `sbt` and `spark 3.5.0`. If you do not have Nix installed check the [official Nix installation guide](https://nixos.org/download)
+
 1. Create a virtual environment
 ```bash
 python3 -m venv venv
