@@ -124,6 +124,8 @@ def calculate_time_averages(operation_count):
     for operation, counts in operation_count.items():
         success_count, success_times = counts["success"]
         failure_count, failure_times = counts["failure"]
+        print(f"Operation: {operation}")
+        print(f"\tSuccessful times: {success_times}")
 
         # Calculate average success time
         if success_count > 0:
@@ -139,7 +141,7 @@ def calculate_time_averages(operation_count):
             avg_failure = 0
         average_failure_time_per_operation[operation] = avg_failure
 
-        # Calculate overall average time per operation
+        # Calculate average time per operation
         total_operation_times = success_times + failure_times
         total_count = success_count + failure_count
         if total_count > 0:
@@ -210,7 +212,8 @@ def parse_flags():
                         help="Number of concurrent schema-changing writers, this will create conflicts.")
     parser.add_argument('--retry-failed', action='store_true',
                         default=RETTRY_FAILED, help="Retry failed operations, when a task fails it will be readded to the tasks queue.")
-    parser.add_argument('--max-threads', type=int, default=MAX_THREADS,
+
+    parser.add_argument('--max-threads', type=int,
                         help="Max number of concurrent threads.")
     args = parser.parse_args()
 
@@ -219,7 +222,8 @@ def parse_flags():
     NUM_WRITERS = args.num_writers
     NUM_WRITER_SCHEMA_CHANGE = args.num_writer_schema_change
     RETTRY_FAILED = args.retry_failed
-    MAX_THREADS = args.max_threads
+    MAX_THREADS = args.max_threads if args.max_threads is not None else (
+        NUM_READERS + NUM_WRITERS + NUM_WRITER_SCHEMA_CHANGE)
     # Print the configuration
     print("=== Configuration ===")
     print(f"Number of readers: {NUM_READERS}")
@@ -227,6 +231,7 @@ def parse_flags():
     print(f"Number of writers with schema change: {NUM_WRITER_SCHEMA_CHANGE}")
     print(f"Number of iterations: {ITERATIONS}")
     print(f"Max number of threads: {MAX_THREADS}")
+    print(f"Retry failed operations: {RETTRY_FAILED}")
 
 
 def main():
@@ -248,10 +253,10 @@ def main():
         executor.submit(worker, tasks, results)
 
     # capture the stdout and stderr
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    sys.stdout = io.StringIO()
-    sys.stderr = io.StringIO()
+    # old_stdout = sys.stdout
+    # old_stderr = sys.stderr
+    # sys.stdout = io.StringIO()
+    # sys.stderr = io.StringIO()
     start_time = time.time()
     for _ in range(ITERATIONS):
         for operation, count in operations:
@@ -266,8 +271,8 @@ def main():
     tasks.join()
     end_time = time.time()
     # Restore stdout and stderr
-    sys.stdout = old_stdout
-    sys.stderr = old_stderr
+    # sys.stdout = old_stdout
+    # sys.stderr = old_stderr
 
     # Count the number of successful and failed operations
     #
