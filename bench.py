@@ -1,4 +1,6 @@
 import os
+import csv
+import argparse
 import time
 import io
 import sys
@@ -10,6 +12,7 @@ import threading
 import queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Tuple
+
 
 TABLE_PATH = "delta-table-bench"
 
@@ -160,17 +163,14 @@ def calculate_time_averages(operation_count):
     }
 
 
-def print_stats(operation_task_per_iter, operation_count, global_time_taken):
+def print_stats_human(operation_task_per_iter, operation_count, global_time_taken):
     print("=== Statistics ===")
-    print(f"Total number of threads: {MAX_THREADS}")
-    print(f"Retry failed operations: {RETTRY_FAILED}")
 
     total_success = sum(counts['success'][0]
                         for counts in operation_count.values())
     total_failure = sum(counts['failure'][0]
                         for counts in operation_count.values())
     print(f"Total number of operations: {total_success + total_failure}")
-    print(f"Total number of iterations: {ITERATIONS}")
     for operation, number in operation_task_per_iter:
         print(f"\tNumber of {
               operation.__name__} per second called: {number}")
@@ -196,8 +196,43 @@ def print_stats(operation_task_per_iter, operation_count, global_time_taken):
             operations_time["average_failure_time_per_operation"][operation]}")
 
 
+def parse_flags():
+    global NUM_READERS, NUM_WRITERS, NUM_WRITER_SCHEMA_CHANGE, MAX_THREADS, RETTRY_FAILED
+    parser = argparse.ArgumentParser(
+        description="Configure concurrent readers and writers.")
+    parser.add_argument('--iterations', type=int,
+                        default=ITERATIONS, help="Number of iterations to run the test, the number of readers and writters will be N times the iterations.")
+    parser.add_argument('--num-readers', type=int,
+                        default=NUM_READERS, help="Number of concurrent readers.")
+    parser.add_argument('--num-writers', type=int,
+                        default=NUM_WRITERS, help="Number of concurrent writers.")
+    parser.add_argument('--num-writer-schema-change', type=int, default=NUM_WRITER_SCHEMA_CHANGE,
+                        help="Number of concurrent schema-changing writers, this will create conflicts.")
+    parser.add_argument('--retry-failed', action='store_true',
+                        default=RETTRY_FAILED, help="Retry failed operations, when a task fails it will be readded to the tasks queue.")
+    parser.add_argument('--max-threads', type=int, default=MAX_THREADS,
+                        help="Max number of concurrent threads.")
+    args = parser.parse_args()
+
+    # Set the global variables based on flags
+    NUM_READERS = args.num_readers
+    NUM_WRITERS = args.num_writers
+    NUM_WRITER_SCHEMA_CHANGE = args.num_writer_schema_change
+    RETTRY_FAILED = args.retry_failed
+    MAX_THREADS = args.max_threads
+    # Print the configuration
+    print("=== Configuration ===")
+    print(f"Number of readers: {NUM_READERS}")
+    print(f"Number of writers: {NUM_WRITERS}")
+    print(f"Number of writers with schema change: {NUM_WRITER_SCHEMA_CHANGE}")
+    print(f"Number of iterations: {ITERATIONS}")
+    print(f"Max number of threads: {MAX_THREADS}")
+
+
 def main():
 
+    # print arguments
+    parse_flags()
     tasks = queue.Queue()
     results = queue.Queue()
 
@@ -250,7 +285,7 @@ def main():
             operation_count[operation]["failure"][1].append(time_taken)
 
     # Print the results
-    print_stats(operations, operation_count, end_time-start_time)
+    print_stats_human(operations, operation_count, end_time-start_time)
 
     # Shutdown the executor
     executor.shutdown(wait=True)

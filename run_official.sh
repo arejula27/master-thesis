@@ -1,23 +1,23 @@
 #! /bin/bash
 
 
-# Check it has one argument
-if [ "$#" -ne 1 ]; then
+# Check it has at least one argument
+if [ "$#" -lt 1 ]; then
     echo "Usage: $0 <path_to_python_script>"
     exit 1
 fi
 
-# Get the file name from the argument
+# Get the file name from the argument (all the args from the first)
 
-python_script="$1"
+python_script="${@:1}"
 
 # Check if the argument is a file
-if [ ! -f "$python_script" ]; then
+if [ ! -f "$1" ]; then
     echo "Error: $1 is not a file"
     exit 1
 fi
 # Check if the file is a python script
-if [[ "$python_script" != *.py ]]; then
+if [[ "$1" != *.py ]]; then
     echo "Error: $1 is not a python script"
     exit 1
 fi
@@ -42,11 +42,10 @@ for jar in "${jars_files[@]}"; do
     delta_jars+="$jars_path/$jar,"
 done
 
-
 spark-submit \
   --class DeltaExperiment \
   --jars ${delta_jars%?} \
   --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" \
   --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" \
   --conf "spark.databricks.delta.schema.autoMerge.enabled=true" \
-  "$python_script" 2> /dev/null
+  $python_script 2> /dev/null
