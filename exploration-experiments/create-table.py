@@ -4,7 +4,7 @@ from pyspark.sql import SparkSession
 TABLE_PATH = "delta-table-custom"
 
 spark = SparkSession.builder \
-    .appName("DeltaExperiment") \
+    .appName("CreateTable") \
     .getOrCreate()
 
 # delete the current delta table

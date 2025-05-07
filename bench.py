@@ -4,10 +4,8 @@ import io
 import sys
 import random
 import string
-import pyspark
-from delta import *
+from pyspark.sql import SparkSession
 from collections import defaultdict
-from delta.tables import *
 import threading
 import queue
 from concurrent.futures import ThreadPoolExecutor
@@ -56,11 +54,9 @@ def change_schema_and_append_delta_row():
     df.write.format("delta").mode("append").save(TABLE_PATH)
 
 
-builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
-    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-
-spark = configure_spark_with_delta_pip(builder).getOrCreate()
+spark = SparkSession.builder \
+    .appName("bench") \
+    .getOrCreate()
 
 # Enable auto schema merging, this will allow us to merge the schema automatically in all delta lake tables
 spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")

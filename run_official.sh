@@ -48,4 +48,5 @@ spark-submit \
   --jars ${delta_jars%?} \
   --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" \
   --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" \
+  --conf "spark.databricks.delta.schema.autoMerge.enabled=true" \
   "$python_script" 2> /dev/null
