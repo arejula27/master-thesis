@@ -1,9 +1,6 @@
 import os
-import csv
 import argparse
 import time
-import io
-import sys
 import random
 import string
 from pyspark.sql import SparkSession
@@ -12,6 +9,7 @@ import threading
 import queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Tuple
+import csv
 
 
 TABLE_PATH = "delta-table-bench"
@@ -19,14 +17,20 @@ TABLE_PATH = "delta-table-bench"
 # Number of seconds to run the test
 ITERATIONS = 10
 # Concurrent readers and writers per second
-NUM_READERS = 5
+NUM_READERS = 3
 NUM_WRITERS = 3
 NUM_WRITER_SCHEMA_CHANGE = 0
 # Max concurrent threads
 MAX_THREADS = NUM_READERS + NUM_WRITERS + NUM_WRITER_SCHEMA_CHANGE
 
 # Set to True will retry the failed operations after a delay
-RETTRY_FAILED = True
+RETTRY_FAILED = False
+
+# Default name of the experiment
+EXPERIMENT_DEFAULT_NAME = "benchmark"
+SAVE_STATS = False
+
+SLEEP_TIME = 5
 
 
 def random_string(length=10):
@@ -76,8 +80,8 @@ df.write.format("delta").save(TABLE_PATH)
 def worker(tasks: queue.Queue[Callable[[], None]],
            results: queue.Queue[Tuple[str, bool]]):
     while True:
-        # Get the next task from the queue
-        operation, attempt = tasks.get(block=True, timeout=2)
+        # Get the next task from the queue, the timeout will
+        operation, attempt = tasks.get(block=True, timeout=SLEEP_TIME+1)
         # sleep for attemps *0.5 seconds
         time.sleep(attempt * 0.5)
         start_time = time.time()
@@ -165,41 +169,93 @@ def calculate_time_averages(operation_count):
     }
 
 
-def print_stats_human(operation_task_per_iter, operation_count, global_time_taken):
-    print("=== Statistics ===")
-
+def calculate_stats(operation_task_per_iter, operation_count, global_time_taken):
     total_success = sum(counts['success'][0]
                         for counts in operation_count.values())
     total_failure = sum(counts['failure'][0]
                         for counts in operation_count.values())
-    print(f"Total number of operations: {total_success + total_failure}")
-    for operation, number in operation_task_per_iter:
-        print(f"\tNumber of {
-              operation.__name__} per second called: {number}")
-
-    print("\n=== Operation Results ===")
-    print(f"Total time taken: {global_time_taken:.2f} seconds")
-    # calc average time taken
     operations_time = calculate_time_averages(operation_count)
-    print(f"Average time per operation: {operations_time["average_time"]}")
-    print(f"Total number of successful operations: {total_success}")
-    print(f"Total number of failed operations: {total_failure}")
 
-    for operation, counts in operation_count.items():
-        print(f"\nOperation: {operation}")
-        print(f"\tAverage time: {
-              operations_time["average_time_per_operation"][operation]}")
-        print(f"\tSuccessful operations: {counts['success'][0]}")
-        print(f"\t\tAverage time on sucess: {
-              operations_time["average_success_time_per_operation"][operation]}")
+    stats = {
+        "total_time_taken": global_time_taken,
+        "total_success": total_success,
+        "total_failure": total_failure,
+        "average_time": operations_time["average_time"],
+        "operation_details": {}
+    }
 
-        print(f"\tFailed operations: {counts['failure'][0]}")
-        print(f"\t\tAverage time on failure: {
-            operations_time["average_failure_time_per_operation"][operation]}")
+    for operation_name, counts in operation_count.items():
+        stats["operation_details"][operation_name] = {
+            "average_time": operations_time["average_time_per_operation"].get(operation_name, 0),
+            "success_count": counts['success'][0],
+            "failure_count": counts['failure'][0],
+            "average_success_time": operations_time["average_success_time_per_operation"].get(operation_name, 0),
+            "average_failure_time": operations_time["average_failure_time_per_operation"].get(operation_name, 0),
+        }
+    return stats
+
+
+def print_stats(stats):
+    print("=== Statistics ===")
+    print(f"Total time taken: {stats['total_time_taken']:.2f} seconds")
+    print(f"Total number of successful operations: {stats['total_success']}")
+    print(f"Total number of failed operations: {stats['total_failure']}")
+    print(f"Average time per operation: {stats['average_time']:.2f} seconds")
+
+    print("\n=== Operation Details ===")
+    for operation_name, details in stats['operation_details'].items():
+        print(f"Operation: {operation_name}")
+        print(f"\tAverage time: {details['average_time']:.2f} seconds")
+        print(f"\tSuccessful operations: {details['success_count']}")
+        print(f"\t\tAverage time on success: {
+              details['average_success_time']:.2f} seconds")
+        print(f"\tFailed operations: {details['failure_count']}")
+
+
+def log_stats(stats, config):
+    file_name = f"{EXPERIMENT_DEFAULT_NAME}.csv"
+    file_exists = os.path.exists(file_name)
+    with open(file_name, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            # Write header if file doesn't exist
+            header = ["total_time_taken", "total_success",
+                      "total_failure", "average_time"]
+            for operation_name in sorted(stats["operation_details"].keys()):
+                header.extend([
+                    f"average_time_{operation_name}",
+                    f"success_count_{operation_name}",
+                    f"failure_count_{operation_name}",
+                    f"average_success_time_{operation_name}",
+                    f"average_failure_time_{operation_name}"
+                ])
+            header.extend(sorted(config.keys()))
+            writer.writerow(header)
+        # Write the row with current stats
+        row = [
+            stats['total_time_taken'],
+            stats['total_success'],
+            stats['total_failure'],
+            stats['average_time']
+        ]
+        for operation_name in sorted(stats["operation_details"].keys()):
+            details = stats["operation_details"][operation_name]
+            row.extend([
+                details['average_time'],
+                details['success_count'],
+                details['failure_count'],
+                details['average_success_time'],
+                details['average_failure_time']
+            ])
+        # Add the config values to the row
+        for key in sorted(config.keys()):
+            row.append(config[key])
+
+        writer.writerow(row)
 
 
 def parse_flags():
-    global NUM_READERS, NUM_WRITERS, NUM_WRITER_SCHEMA_CHANGE, MAX_THREADS, RETTRY_FAILED
+    global NUM_READERS, NUM_WRITERS, NUM_WRITER_SCHEMA_CHANGE, MAX_THREADS, RETTRY_FAILED, ITERATIONS, SAVE_STATS, EXPERIMENT_DEFAULT_NAME
     parser = argparse.ArgumentParser(
         description="Configure concurrent readers and writers.")
     parser.add_argument('--iterations', type=int,
@@ -215,15 +271,24 @@ def parse_flags():
 
     parser.add_argument('--max-threads', type=int,
                         help="Max number of concurrent threads.")
+    parser.add_argument('--name', type=str, default=EXPERIMENT_DEFAULT_NAME,
+                        help="Name of the experiment, this will be used to create the log file.")
+    parser.add_argument('--save', default=False, action='store_true',
+                        help="Save the stats to a file. Set the name of the experiment with --name flag.")
     args = parser.parse_args()
 
     # Set the global variables based on flags
+
+    ITERATIONS = args.iterations
     NUM_READERS = args.num_readers
     NUM_WRITERS = args.num_writers
     NUM_WRITER_SCHEMA_CHANGE = args.num_writer_schema_change
     RETTRY_FAILED = args.retry_failed
     MAX_THREADS = args.max_threads if args.max_threads is not None else (
         NUM_READERS + NUM_WRITERS + NUM_WRITER_SCHEMA_CHANGE)
+    EXPERIMENT_DEFAULT_NAME = args.name
+    SAVE_STATS = args.save
+
     # Print the configuration
     print("=== Configuration ===")
     print(f"Number of readers: {NUM_READERS}")
@@ -233,11 +298,23 @@ def parse_flags():
     print(f"Max number of threads: {MAX_THREADS}")
     print(f"Retry failed operations: {RETTRY_FAILED}")
 
+    config = {
+        "num_readers": NUM_READERS,
+        "num_writers": NUM_WRITERS,
+        "num_writer_schema_change": NUM_WRITER_SCHEMA_CHANGE,
+        "num_iterations": ITERATIONS,
+        "max_threads": MAX_THREADS,
+        "retry_failed": RETTRY_FAILED,
+        "experiment_name": EXPERIMENT_DEFAULT_NAME,
+        "save_stats": SAVE_STATS
+    }
+    return config
+
 
 def main():
 
     # print arguments
-    parse_flags()
+    conf = parse_flags()
     tasks = queue.Queue()
     results = queue.Queue()
 
@@ -257,18 +334,22 @@ def main():
     # old_stderr = sys.stderr
     # sys.stdout = io.StringIO()
     # sys.stderr = io.StringIO()
+    print("=== Starting the test ===")
     start_time = time.time()
     for _ in range(ITERATIONS):
+        print(f"Iteration {_+1} of {ITERATIONS}")
         for operation, count in operations:
             for _ in range(count):
                 # Add the operation to the queue
                 # format (operation, attempt)
                 # The attempt is always 0 for the first time
                 tasks.put((operation, 0), block=False)
-        time.sleep(1)
+        time.sleep(SLEEP_TIME)
 
     # Wait for all tasks to be done
+    print("Waiting for all tasks to be done...")
     tasks.join()
+    print("All tasks done.")
     end_time = time.time()
     # Restore stdout and stderr
     # sys.stdout = old_stdout
@@ -290,8 +371,15 @@ def main():
             operation_count[operation]["failure"][1].append(time_taken)
 
     # Print the results
-    print_stats_human(operations, operation_count, end_time-start_time)
+    stats = calculate_stats(operations, operation_count,
+                            end_time-start_time)
 
+    print_stats(stats)
+    if SAVE_STATS:
+        log_stats(stats, conf)
+        print(f"Stats saved to {EXPERIMENT_DEFAULT_NAME}.csv")
+    else:
+        print("Stats not saved, use --save flag to save the stats.")
     # Shutdown the executor
     executor.shutdown(wait=True)
 

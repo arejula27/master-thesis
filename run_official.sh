@@ -26,8 +26,8 @@ fi
 jars_path="delta-jars"
 # Delta jars files required
 jars_files=(
-    "oficial-delta-spark_2.12-3.1.0.jar"
-    "oficial-delta-storage-3.1.0.jar"
+    "official-delta-spark_2.12-3.1.0.jar"
+    "official-delta-storage-3.1.0.jar"
 )
 # Check if the JAR files exist
 for jar in "${jars_files[@]}"; do
