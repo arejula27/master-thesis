@@ -2,10 +2,10 @@
 
 let
   # Version, URL and hash of the Spark binary
-  sparkVersion = "3.5.0";
+  sparkVersion = "3.5.5";
   sparkUrl = "https://archive.apache.org/dist/spark/spark-${sparkVersion}/spark-${sparkVersion}-bin-hadoop3.tgz";
   # The hash must match the official one at https://archive.apache.org/dist/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz.sha512
-  sparkHash = "8883c67e0a138069e597f3e7d4edbbd5c3a565d50b28644aad02856a1ec1da7cb92b8f80454ca427118f69459ea326eaa073cf7b1a860c3b796f4b07c2101319";
+  sparkHash = "ec5ff678136b1ff981e396d1f7b5dfbf399439c5cb853917e8c954723194857607494a89b7e205fce988ec48b1590b5caeae3b18e1b5db1370c0522b256ff376";
 
   # Derivation for preparing the Spark binary
   # Warning: It does not include the JAVA runtime, it must be installed separately
