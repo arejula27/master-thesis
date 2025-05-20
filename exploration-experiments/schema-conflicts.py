@@ -1,25 +1,19 @@
 import os
-import pyspark
-from delta import *
-from delta.tables import *
+from pyspark.sql import SparkSession
 import threading
 
-TABLE_PATH = "delta-table"
+TABLE_PATH = "delta-table-conflicts"
 
 
 def append_to_table(df):
     df.write.format("delta").mode("append").save(TABLE_PATH)
 
 
-builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
-    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-
-
-spark = configure_spark_with_delta_pip(builder).getOrCreate()
-
+spark = SparkSession.builder \
+    .appName("CreateTable") \
+    .getOrCreate()
 # Enable auto schema merging, this will allow us to merge the schema automatically in all delta lake tables
-spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
+# spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
 
 
 # delete the current delta table
@@ -49,10 +43,6 @@ df = spark.createDataFrame([("jose", 65)]).toDF("first_name", "age")
 df.write.format("delta").mode("append").save(TABLE_PATH)
 
 
-# This would show the new records without the new schema
-# df_reader.show()
-
-
 # Read the delta table to get the schema
 df_reader = spark.read.format("delta").load(TABLE_PATH)
 df_reader.show()
@@ -60,27 +50,10 @@ df_reader.show()
 
 # We will try to make two append operations in parallel
 
-columns = ["first_name", "age", "country"]
-df1 = spark.createDataFrame([("Tom", 34, "France")], columns)
-df2 = spark.createDataFrame([("jane", 25, "Canada")], columns)
-thread1 = threading.Thread(target=append_to_table, args=(df1,))
-thread2 = threading.Thread(target=append_to_table, args=(df2,))
-
-thread1.start()
-thread2.start()
-
-thread1.join()
-thread2.join()
-
-# Show the table
-df_reader.show()
-
-
-# Now lets try to append different schemas that are already in the table
 columns1 = ["first_name", "age", "country"]
-columns2 = ["first_name", "age"]
-df1 = spark.createDataFrame([("Marcos", 34, "France")], columns1)
-df2 = spark.createDataFrame([("Ignacio", 25)], columns2)
+columns2 = ["first_name", "age", "job"]
+df1 = spark.createDataFrame([("Tom", 34, "France")], columns1)
+df2 = spark.createDataFrame([("jane", 25, "Plumber")], columns2)
 thread1 = threading.Thread(target=append_to_table, args=(df1,))
 thread2 = threading.Thread(target=append_to_table, args=(df2,))
 
@@ -90,24 +63,6 @@ thread2.start()
 thread1.join()
 thread2.join()
 
-# Show the table
-df_reader.show()
-
-
-# Now lets try to append different columns
-columns1 = ["name", "id"]
-columns2 = ["first_name", "city"]
-df1 = spark.createDataFrame([("Eli", 24929229)], columns1)
-df2 = spark.createDataFrame([("Jorge", "Madrid")], columns2)
-
-thread1 = threading.Thread(target=append_to_table, args=(df1,))
-thread2 = threading.Thread(target=append_to_table, args=(df2,))
-thread1.start()
-thread2.start()
-
-thread1.join()
-thread2.join()
-
-# Show the table with the new schema
+# Read the delta table to get the schema
 df_reader = spark.read.format("delta").load(TABLE_PATH)
 df_reader.show()
