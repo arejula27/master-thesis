@@ -9,16 +9,20 @@ ITERATIONS=10
 NUM_READERS=3
 MAX_WRITERS=7
 
+experiment_name="writers-conflict-no-retry-official-$ITERATIONS"
+rm "$experiment_name".csv
+
 # Run the experiment for each writer count from 0 to MAX_WRITERS
 for NUM_WRITERS in $(seq 0 $MAX_WRITERS); do
     ./run_official.sh bench.py --iterations $ITERATIONS --num-readers $NUM_READERS \
-                              --num-writers $NUM_WRITERS --num-writer-schema-change $NUM_WRITERS --save --name "writers-conflict-no-retry-official" 
+                              --num-writers $NUM_WRITERS --num-writer-schema-change $NUM_WRITERS --save --name "$experiment_name"
 done
 
-rm "writers-conflict-no-retry-custom.csv"
+experiment_name="writers-conflict-no-retry-custom-$ITERATIONS"
+rm "$experiment_name".csv
 
 # Same with my custom delta lake
 for NUM_WRITERS in $(seq 0 $MAX_WRITERS); do
     ./run_custom.sh bench.py --iterations $ITERATIONS --num-readers $NUM_READERS \
-                              --num-writers $NUM_WRITERS --num-writer-schema-change $NUM_WRITERS --save --name "writers-conflict-no-retry-custom" 
+                              --num-writers $NUM_WRITERS --num-writer-schema-change $NUM_WRITERS --save --name "$experiment_name"
 done
