@@ -6,3 +6,8 @@ delta-table*
 
 #do not track delta jars
 delta-jars/
+
+*venv*
+
+
+*.png
