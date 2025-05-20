@@ -176,12 +176,18 @@ def calculate_stats(operation_task_per_iter, operation_count, global_time_taken)
                         for counts in operation_count.values())
     operations_time = calculate_time_averages(operation_count)
 
+    # make a default dict to store operation_details
+    operation_details = defaultdict(lambda: {
+                                    "average_time": 0, "success_count": 0,
+                                    "failure_count": 0,
+                                    "average_success_time": 0,
+                                    "average_failure_time": 0})
     stats = {
         "total_time_taken": global_time_taken,
         "total_success": total_success,
         "total_failure": total_failure,
         "average_time": operations_time["average_time"],
-        "operation_details": {}
+        "operation_details": operation_details
     }
 
     for operation_name, counts in operation_count.items():
@@ -212,7 +218,7 @@ def print_stats(stats):
         print(f"\tFailed operations: {details['failure_count']}")
 
 
-def log_stats(stats, config):
+def log_stats(stats, operation_names, config):
     file_name = f"{EXPERIMENT_DEFAULT_NAME}.csv"
     file_exists = os.path.exists(file_name)
     with open(file_name, mode="a", newline="") as f:
@@ -221,7 +227,7 @@ def log_stats(stats, config):
             # Write header if file doesn't exist
             header = ["total_time_taken", "total_success",
                       "total_failure", "average_time"]
-            for operation_name in sorted(stats["operation_details"].keys()):
+            for operation_name in sorted(operation_names):
                 header.extend([
                     f"average_time_{operation_name}",
                     f"success_count_{operation_name}",
@@ -238,7 +244,7 @@ def log_stats(stats, config):
             stats['total_failure'],
             stats['average_time']
         ]
-        for operation_name in sorted(stats["operation_details"].keys()):
+        for operation_name in sorted(operation_names):
             details = stats["operation_details"][operation_name]
             row.extend([
                 details['average_time'],
@@ -376,7 +382,8 @@ def main():
 
     print_stats(stats)
     if SAVE_STATS:
-        log_stats(stats, conf)
+        operation_names = [op[0].__name__ for op in operations]
+        log_stats(stats, operation_names, conf)
         print(f"Stats saved to {EXPERIMENT_DEFAULT_NAME}.csv")
     else:
         print("Stats not saved, use --save flag to save the stats.")
