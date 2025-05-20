@@ -368,6 +368,8 @@ def main():
     while not results.empty():
         operation, success, time_taken = results.get()
         results.task_done()
+        # This print is for debugging purposes, it will print the order of the txs
+        # print(operation, success)
         # Actualizar los contadores en el diccionario
         if success:
             operation_count[operation]["success"][0] += 1
