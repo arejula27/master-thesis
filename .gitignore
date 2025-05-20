@@ -1,2 +1,8 @@
 #do not upload data
 *.csv
+
+#do not track delta tables
+delta-table*
+
+#do not track delta jars
+delta-jars/
