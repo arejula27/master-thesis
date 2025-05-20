@@ -20,7 +20,7 @@ spark = SparkSession.builder \
 os.system(f"rm -rf {TABLE_PATH}")
 
 # create a new delta TABLE
-df = spark.createDataFrame([("bob", 47), ("li", 23), ("leonard", 51)]).toDF(
+df = spark.createDataFrame([("bob", 47)]).toDF(
     "first_name", "age"
 )
 
@@ -32,7 +32,8 @@ df_reader = spark.read.format("delta").load(TABLE_PATH)
 df_reader.show()
 
 # Add a new column
-df = spark.createDataFrame([("frank", 68, "usa"), ("jordana", 26, "brasil")]).toDF(
+print("Adding a new column (schema change)")
+df = spark.createDataFrame([("frank", 68, "usa")]).toDF(
     "first_name", "age", "country"
 )
 
@@ -50,6 +51,7 @@ df_reader.show()
 
 # We will try to make two append operations in parallel
 
+print("Create two records Tom and Jane with different schemas in parallel, one should fail")
 columns1 = ["first_name", "age", "country"]
 columns2 = ["first_name", "age", "job"]
 df1 = spark.createDataFrame([("Tom", 34, "France")], columns1)
