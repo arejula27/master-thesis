@@ -28,8 +28,8 @@ fi
 jars_path="delta-jars"
 # Delta jars files required
 jars_files=(
-    "custom-delta-spark_2.12-3.1.0.jar"
-    "custom-delta-storage-3.1.0.jar"
+    "custom-delta-spark_2.12-3.3.1.jar"
+    "custom-delta-storage-3.3.1.jar"
 )
 # Check if the JAR files exist
 for jar in "${jars_files[@]}"; do
@@ -50,4 +50,5 @@ spark-submit \
   --jars ${delta_jars%?} \
   --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" \
   --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" \
+  --conf "spark.databricks.delta.schema.autoMerge.enabled=true" \
   $python_script 2> /dev/null
