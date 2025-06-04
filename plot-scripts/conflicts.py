@@ -51,13 +51,21 @@ plt.show()
 
 # --- Plot 2 with successes and failures ---
 
+
 # Group sums of success and failure counts by num_writers
 grouped_counts = df.groupby('num_writers')[[
     'success_count_append_delta_row',
     'failure_count_append_delta_row',
     'success_count_change_schema_and_append_delta_row',
-    'failure_count_change_schema_and_append_delta_row'
+    'failure_count_change_schema_and_append_delta_row',
+    'num_iterations'
 ]].sum().reset_index()
+
+grouped_counts['success_count_append_delta_row'] /= grouped_counts['num_iterations']
+grouped_counts['failure_count_append_delta_row'] /= grouped_counts['num_iterations']
+grouped_counts['success_count_change_schema_and_append_delta_row'] /= grouped_counts['num_iterations']
+grouped_counts['failure_count_change_schema_and_append_delta_row'] /= grouped_counts['num_iterations']
+
 
 grouped_counts['num_writers'] = grouped_counts['num_writers'] * 2
 
