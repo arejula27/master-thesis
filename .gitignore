@@ -7,6 +7,8 @@ delta-table*
 #do not track delta jars
 delta-jars/
 
+data/
+
 *venv*
 
 
