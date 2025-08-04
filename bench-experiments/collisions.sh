@@ -3,7 +3,6 @@
 # This script automates running the bench.py script with a fixed number of readers
 # and varying numbers of writers. The number of iterations is fixed at 10.
 
-rm "writers-conflict-no-retry-official.csv"
 # Configuration
 ITERATIONS=10
 NUM_READERS=3

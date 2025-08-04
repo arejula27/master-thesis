@@ -14,11 +14,3 @@ for NUM_WRITERS in $(seq 0 $MAX_WRITERS); do
     ./run_official.sh bench.py --retry-failed --iterations $ITERATIONS --num-readers $NUM_READERS \
                               --num-writers $NUM_WRITERS --num-writer-schema-change $NUM_WRITERS --save --name "writers-conflict-retry-official" 
 done
-
-rm "writers-conflict-retry-custom.csv"
-
-# Same with my custom delta lake
-for NUM_WRITERS in $(seq 0 $MAX_WRITERS); do
-    ./run_custom.sh bench.py --retry-failed --iterations $ITERATIONS --num-readers $NUM_READERS \
-                              --num-writers $NUM_WRITERS --num-writer-schema-change $NUM_WRITERS --save --name "writers-conflict-retry-custom" 
-done

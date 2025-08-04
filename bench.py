@@ -10,6 +10,7 @@ import queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Tuple
 import csv
+import statistics
 
 
 TABLE_PATH = "delta-table-bench"
@@ -186,7 +187,7 @@ def calculate_stats(operation_task_per_iter, operation_count, global_time_taken)
         "total_time_taken": global_time_taken,
         "total_success": total_success,
         "total_failure": total_failure,
-        "average_time": operations_time["average_time"],
+        "average_time": global_time_taken,
         "operation_details": operation_details
     }
 
@@ -317,80 +318,166 @@ def parse_flags():
     return config
 
 
-def main():
+def log_summary_stats(summary_stats, config):
+    file_name = f"{EXPERIMENT_DEFAULT_NAME}.csv"
+    file_exists = os.path.exists(file_name)
 
-    # print arguments
+    with open(file_name, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            header = [
+                "average_time_mean",
+                "average_time_std",
+                "total_success_mean",
+                "total_success_std",
+                "total_failure_mean",
+                "total_failure_std"
+            ]
+            for op_name in sorted(summary_stats["operation_summaries"].keys()):
+                header.extend([
+                    f"{op_name}_mean_time",
+                    f"{op_name}_std_time",
+                    f"{op_name}_mean_success",
+                    f"{op_name}_std_success",
+                    f"{op_name}_mean_failure",
+                    f"{op_name}_std_failure"
+                ])
+            header.extend(sorted(config.keys()))
+            writer.writerow(header)
+
+        row = [
+            summary_stats["average_time_mean"],
+            summary_stats["average_time_std"],
+            summary_stats["total_success_mean"],
+            summary_stats["total_success_std"],
+            summary_stats["total_failure_mean"],
+            summary_stats["total_failure_std"]
+        ]
+        for op_name in sorted(summary_stats["operation_summaries"].keys()):
+            op_stats = summary_stats["operation_summaries"][op_name]
+            row.extend([
+                op_stats["mean_time"],
+                op_stats["std_time"],
+                op_stats["mean_success"],
+                op_stats["std_success"],
+                op_stats["mean_failure"],
+                op_stats["std_failure"]
+            ])
+        for key in sorted(config.keys()):
+            row.append(config[key])
+        writer.writerow(row)
+
+
+def main():
     conf = parse_flags()
     tasks = queue.Queue()
     results = queue.Queue()
 
     operations = [(read_delta_table, NUM_READERS),
                   (append_delta_row, NUM_WRITERS),
-                  (change_schema_and_append_delta_row, NUM_WRITER_SCHEMA_CHANGE),
-                  ]
-    operation_count = defaultdict(lambda: {"success": 0, "failure": 0})
-    # Create a thread pool executor
+                  (change_schema_and_append_delta_row, NUM_WRITER_SCHEMA_CHANGE)]
+
     executor = ThreadPoolExecutor(max_workers=MAX_THREADS)
-    # Start all threads
     for _ in range(MAX_THREADS):
         executor.submit(worker, tasks, results)
 
-    # capture the stdout and stderr
-    # old_stdout = sys.stdout
-    # old_stderr = sys.stderr
-    # sys.stdout = io.StringIO()
-    # sys.stderr = io.StringIO()
     print("=== Starting the test ===")
-    start_time = time.time()
-    for _ in range(ITERATIONS):
-        print(f"Iteration {_+1} of {ITERATIONS}")
+    iteration_stats = []  # Store all iteration stats here
+
+    for i in range(ITERATIONS):
+        print(f"Iteration {i+1} of {ITERATIONS}")
+        start_time = time.time()
+
+        # Enqueue tasks
         for operation, count in operations:
             for _ in range(count):
-                # Add the operation to the queue
-                # format (operation, attempt)
-                # The attempt is always 0 for the first time
                 tasks.put((operation, 0), block=False)
-        time.sleep(SLEEP_TIME)
 
-    # Wait for all tasks to be done
-    print("Waiting for all tasks to be done...")
-    tasks.join()
-    print("All tasks done.")
-    end_time = time.time()
-    # Restore stdout and stderr
-    # sys.stdout = old_stdout
-    # sys.stderr = old_stderr
+        # Wait for current batch of tasks to finish
+        print("Waiting for all tasks to be done...")
+        tasks.join()
+        print("All tasks done.")
 
-    # Count the number of successful and failed operations
-    #
-    operation_count = defaultdict(
-        lambda: {"success": [0, []], "failure": [0, []]})
-    while not results.empty():
-        operation, success, time_taken = results.get()
-        results.task_done()
-        # This print is for debugging purposes, it will print the order of the txs
-        # print(operation, success)
-        # Actualizar los contadores en el diccionario
-        if success:
-            operation_count[operation]["success"][0] += 1
-            operation_count[operation]["success"][1].append(time_taken)
-        else:
-            operation_count[operation]["failure"][0] += 1
-            operation_count[operation]["failure"][1].append(time_taken)
+        end_time = time.time()
 
-    # Print the results
-    stats = calculate_stats(operations, operation_count,
-                            end_time-start_time)
+        # Collect iteration results
+        operation_count = defaultdict(
+            lambda: {"success": [0, []], "failure": [0, []]})
+        while not results.empty():
+            operation, success, time_taken = results.get()
+            results.task_done()
+            if success:
+                operation_count[operation]["success"][0] += 1
+                operation_count[operation]["success"][1].append(time_taken)
+            else:
+                operation_count[operation]["failure"][0] += 1
+                operation_count[operation]["failure"][1].append(time_taken)
 
-    print_stats(stats)
-    if SAVE_STATS:
-        operation_names = [op[0].__name__ for op in operations]
-        log_stats(stats, operation_names, conf)
-        print(f"Stats saved to {EXPERIMENT_DEFAULT_NAME}.csv")
-    else:
-        print("Stats not saved, use --save flag to save the stats.")
-    # Shutdown the executor
+        # Calculate stats for this iteration
+        stats = calculate_stats(
+            operations, operation_count, end_time - start_time)
+        iteration_stats.append(stats)
+        print_stats(stats)
+
     executor.shutdown(wait=True)
+
+    # === Post-run Summary ===
+    print("\n=== Summary of All Iterations ===")
+
+    def collect_field(field):
+        return [s[field] for s in iteration_stats]
+
+    def collect_op_field(op_name, key):
+        return [s['operation_details'][op_name][key] for s in iteration_stats]
+
+    global_summary = {
+        "average_time_mean": statistics.mean(collect_field('average_time')),
+        "average_time_std": statistics.stdev(collect_field('average_time')) if ITERATIONS > 1 else 0.0,
+        "total_success_mean": statistics.mean(collect_field('total_success')),
+        "total_success_std": statistics.stdev(collect_field('total_success')) if ITERATIONS > 1 else 0.0,
+        "total_failure_mean": statistics.mean(collect_field('total_failure')),
+        "total_failure_std": statistics.stdev(collect_field('total_failure')) if ITERATIONS > 1 else 0.0,
+        "operation_summaries": {}
+    }
+
+    for op, _ in operations:
+        name = op.__name__
+        avg_times = collect_op_field(name, 'average_time')
+        mean_time = statistics.mean(avg_times)
+        std_time = statistics.stdev(avg_times) if len(avg_times) > 1 else 0.0
+
+        success_counts = collect_op_field(name, 'success_count')
+        failure_counts = collect_op_field(name, 'failure_count')
+
+        mean_success = statistics.mean(success_counts)
+        std_success = statistics.stdev(success_counts) if len(
+            success_counts) > 1 else 0.0
+
+        mean_failure = statistics.mean(failure_counts)
+        std_failure = statistics.stdev(failure_counts) if len(
+            failure_counts) > 1 else 0.0
+
+        print(f"\nOperation: {name}")
+        print(f"\tMean time: {mean_time:.2f} s")
+        print(f"\tStd dev time: {std_time:.2f} s")
+        print(f"\tMean success count: {mean_success:.2f}")
+        print(f"\tStd dev success count: {std_success:.2f}")
+        print(f"\tMean failure count: {mean_failure:.2f}")
+        print(f"\tStd dev failure count: {std_failure:.2f}")
+
+        global_summary["operation_summaries"][name] = {
+            "mean_time": mean_time,
+            "std_time": std_time,
+            "mean_success": mean_success,
+            "std_success": std_success,
+            "mean_failure": mean_failure,
+            "std_failure": std_failure
+        }
+    # ===
+
+    if SAVE_STATS:
+        log_summary_stats(global_summary, conf)
+        print(f"Global summary saved to {EXPERIMENT_DEFAULT_NAME}.csv")
 
 
 if __name__ == "__main__":
