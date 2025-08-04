@@ -1,15 +1,19 @@
 #! /bin/bash
 
 
+
 # Check it has at least one argument
-if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 <path_to_python_script>"
+if [ "$#" -lt 2 ]; then
+    echo "Usage: $0 <path_to_python_script> <threads>" 
     exit 1
 fi
 
 # Get the file name from the argument (all the args from the first)
 
 python_script="${@:1}"
+# Get the number of threads from the second argument
+threads="$2"
+
 
 # Check if the argument is a file
 if [ ! -f "$1" ]; then
@@ -26,8 +30,8 @@ fi
 jars_path="delta-jars"
 # Delta jars files required
 jars_files=(
-    "official-delta-spark_2.12-3.3.1.jar"
-    "official-delta-storage-3.3.1.jar"
+    "custom-delta-spark_2.12-3.3.1.jar"
+    "custom-delta-storage-3.3.1.jar"
 )
 # Check if the JAR files exist
 for jar in "${jars_files[@]}"; do
@@ -42,14 +46,12 @@ for jar in "${jars_files[@]}"; do
     delta_jars+="$jars_path/$jar,"
 done
 
+
 spark-submit \
   --class DeltaExperiment \
   --jars ${delta_jars%?} \
+  --master local[$threads] \
   --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" \
   --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" \
   --conf "spark.databricks.delta.schema.autoMerge.enabled=true" \
-  --conf "spark.executor.memory=4g" \
-  --conf "spark.driver.memory=4g" \
-  --conf "spark.executor.extraJavaOptions=-XX:-UseGCOverheadLimit" \
-  --conf "spark.driver.extraJavaOptions=-XX:-UseGCOverheadLimit" \
   $python_script 2> /dev/null

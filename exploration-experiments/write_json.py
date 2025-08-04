@@ -19,7 +19,7 @@ input_path_2 = "data/nested_2.json"
 input_path_3 = "data/nested_3.json"
 
 # Read the JSON file (automatically infers schema including nested structure)
-df = spark.read.option("multiline", "true").json(input_path)
+df = spark.read.json(input_path)
 
 # (Optional) Print schema to confirm nested structure
 df.printSchema()

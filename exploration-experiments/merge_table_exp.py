@@ -1,7 +1,5 @@
+from pyspark.sql import SparkSession
 import os
-import pyspark
-from delta import *
-from delta.tables import *
 import threading
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
@@ -25,6 +23,7 @@ def change_schema(old_column, new_column):
 
 def get_folder_stats():
     """Get the number of parquet files in a folder of the table"""
+
     parquet_files = [file for file in os.listdir(
         TABLE_PATH) if file.endswith('.parquet')]
     return len(parquet_files)
@@ -37,12 +36,9 @@ def print_table(message="New record"):
     print(f"Number of parquet files: {get_folder_stats()}")
 
 
-builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
-    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-
-
-spark = configure_spark_with_delta_pip(builder).getOrCreate()
+spark = SparkSession.builder \
+    .appName("CreateTable") \
+    .getOrCreate()
 
 # Enable auto schema merging, this will allow us to merge the schema automatically in all delta lake tables
 spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")

@@ -1,7 +1,5 @@
 import os
-import pyspark
-from delta import *
-from delta.tables import *
+from pyspark.sql import SparkSession
 import threading
 
 TABLE_PATH = "delta-table"
@@ -22,13 +20,9 @@ def change_schema(old_column, new_column):
         print("==============")
 
 
-builder = pyspark.sql.SparkSession.builder.appName("MyApp") \
-    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-
-
-spark = configure_spark_with_delta_pip(builder).getOrCreate()
-
+spark = SparkSession.builder \
+    .appName("CreateTable") \
+    .getOrCreate()
 
 # delete the current delta table
 os.system(f"rm -rf {TABLE_PATH}")
